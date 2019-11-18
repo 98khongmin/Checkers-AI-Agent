@@ -19,7 +19,6 @@ INCLUDED FILES :
 * hang.c
 * graphics.c
 * graphics.h
-* graphics.o
 * Makefile
 * myprog.c
 * myprog.h
@@ -50,6 +49,7 @@ After executing the make, run this:
 $ checkers <player1> <player2> <SecPerMove> [-MaxDepth x]
 
 Replace <player1> and <player2> with the players you want, such as year1, computer, depth etc.
+Each player need to be an executable file; do "chmod +x <playername>" if it fails to read the players.
 
 Replace <SecPerMove> with a natural number that how many seconds you will allow them to go 
 through the Minimax branch.
