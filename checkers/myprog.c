@@ -18,7 +18,7 @@ char board[8][8];
 char bestmove[12];
 int me, cutoff, endgame;
 long NumNodes;
-int MaxDepth, intMove;
+int MaxDepth;
 
 /*** For timing ***/
 clock_t start;
@@ -35,26 +35,20 @@ int movelist[48][12];
 /* Print the amount of time passed since my turn began */
 void PrintTime(void)
 {
-    clock_t current;
-    float total;
-
-    current = times(&bff);
-    total = (float)((float)current - (float)start) / CLK_TCK;
+    float total = (float)((float)clock() - (float)start);
     fprintf(stderr, "Time = %f\n", total);
 }
 
 /* Determine if I'm low on time */
 int LowOnTime(void)
 {
-    clock_t current;
-    float total;
-
-    current = times(&bff);
-    total = (float)((float)current - (float)start) / CLK_TCK;
-    if (total >= (SecPerMove - 1.0))
+    clock_t current = (clock() - start) / CLOCKS_PER_SEC;
+    if (current >= SecPerMove - 0.5)
         return 1;
     else
+    {
         return 0;
+    }
 }
 
 /* Copy a square state */
@@ -328,7 +322,6 @@ double evalBoard(char board[8][8])
             }
         }
     }
-    //fprintf(stderr, "%g\n", me == 2 ? whitesum - redsum : redsum - whitesum);
     if (me == 2)
         return whitesum - redsum;
     else
@@ -358,6 +351,10 @@ double minVal(struct State *state, double alpha, double beta, int depth)
 
         PerformMove(currState.board, currState.movelist[x], MoveLength(currState.movelist[x]));
         temp = maxVal(&currState, alpha, beta, depth);
+        if (LowOnTime() == 1)
+        {
+            break;
+        }
         if (rval > temp)
             rval = temp;
         if (rval <= alpha)
@@ -391,6 +388,10 @@ double maxVal(struct State *state, double alpha, double beta, int depth)
 
         PerformMove(currState.board, currState.movelist[x], MoveLength(currState.movelist[x]));
         temp = minVal(&currState, alpha, beta, depth);
+        if (LowOnTime() == 1)
+        {
+            break;
+        }
         if (rval < temp)
             rval = temp;
         if (rval >= beta)
@@ -401,56 +402,34 @@ double maxVal(struct State *state, double alpha, double beta, int depth)
     return rval;
 }
 
-void *timerThread(void *p)
+/* Employ your favorite search to find the best move here.  */
+/* This example code shows you how to call the FindLegalMoves function */
+/* and the PerformMove function */
+void FindBestMove(int player)
 {
-    int wait = (int)SecPerMove * 1000000 - 1000000;
-    usleep(wait);
-    return NULL;
-}
-
-void TimedFindBestMove(int player, char *buf)
-{
-    pthread_t timer, fbmt;
-    int rval = pthread_create(&timer, NULL, timerThread, NULL);
-
-    struct State *state = (struct State *)malloc(sizeof(struct State));
+    struct State state;
     /* Set up the current state */
-    state->player = player;
-    memcpy(state->board, board, 64 * sizeof(char));
+    state.player = player;
+    memcpy(state.board, board, 64 * sizeof(char));
     memset(bestmove, 0, 12 * sizeof(char));
 
     /* Find the legal moves for the current state */
     FindLegalMoves(&state);
-    intMove = rand() % state->numLegalMoves;
 
-    rval = pthread_create(&fbmt, NULL, FindBestMove, (void *)state);
-    pthread_detach(fbmt);
-    pthread_join(timer, NULL);
-    fprintf(stderr, "before cancel\n");
-    pthread_cancel(fbmt);
-    fprintf(stderr, "after cancel\n");
-    memcpy(bestmove, state->movelist[intMove], MoveLength(state->movelist[intMove]));
-    MoveToText(bestmove, buf);
-}
-
-/* Employ your favorite search to find the best move here.  */
-/* This example code shows you how to call the FindLegalMoves function */
-/* and the PerformMove function */
-void *FindBestMove(void *args)
-{
-    struct State *state = (struct State *)args;
-    int x, y;
-    for (y = 3; y < 1000; y++)
+    int intMove = rand() % state.numLegalMoves;
+    int x;
+    int y = 3;
+    while (LowOnTime() == 0)
     {
         double alpha = -10000;
         double beta = 10000;
-        int tempBest;
-        for (x = 0; x < state->numLegalMoves; x++)
+        double tempBest = 0;
+        for (x = 0; x < state.numLegalMoves; x++)
         {
             struct State currState;
-            double rval;
-            memcpy(&currState, state, sizeof(currState));
-            if (state->player == 1)
+            double rval = 0;
+            memcpy(&currState, &state, sizeof(currState));
+            if (state.player == 1)
             {
                 currState.player = 2;
             }
@@ -461,18 +440,24 @@ void *FindBestMove(void *args)
 
             PerformMove(currState.board, currState.movelist[x], MoveLength(currState.movelist[x]));
             rval = minVal(&currState, alpha, beta, y);
+            if (LowOnTime() == 1)
+            {
+                tempBest = intMove;
+                break;
+            }
             if (rval > alpha)
             {
                 alpha = rval;
                 tempBest = x;
             }
-            fprintf(stderr, "got to this point2\n");
         }
-        fprintf(stderr, "got to this point3\n");
-
         intMove = tempBest;
+        y++;
     }
-    return NULL;
+
+    memcpy(bestmove, state.movelist[intMove], MoveLength(state.movelist[intMove]));
+    //FindLegalMoves(&state);
+    //intMove = rand() % state.numLegalMoves;
     // For now, until you write your search routine, we will just set the best move
     // to be a random (legal) one, so that it plays a legal game of checkers.
     // You *will* want to replace this with a more intelligent move seleciton
@@ -632,7 +617,8 @@ int main(int argc, char *argv[])
 
     if (player1)
     {
-        start = times(&bff);
+        start = clock();
+        // start = times(&bff);
         goto determine_next_move;
     }
 
@@ -642,7 +628,8 @@ int main(int argc, char *argv[])
         //fgets(buf, sizeof(buf), stdin);
         len = read(STDIN_FILENO, buf, 1028);
         buf[len] = '\0';
-        start = times(&bff);
+        start = clock();
+        // start = times(&bff);
         memset(move, 0, 12 * sizeof(char));
 
         /* Update the board to reflect opponents move */
@@ -652,9 +639,9 @@ int main(int argc, char *argv[])
     determine_next_move:
         /* Find my move, update board, and write move to pipe */
         if (player1)
-            TimedFindBestMove(1, buf);
+            FindBestMove(1);
         else
-            TimedFindBestMove(2, buf);
+            FindBestMove(2);
         if (bestmove[0] != 0)
         { /* There is a legal move */
             mlen = MoveLength(bestmove);

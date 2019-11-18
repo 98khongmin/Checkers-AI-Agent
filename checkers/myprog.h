@@ -51,7 +51,7 @@ int FindLegalMoves(struct State *state);
 int EVAL(char Board[8][8]);
 int MaxVal(struct State *state, int alpha, int beta, int depth);
 int MinVal(struct State *state, int alpha, int beta, int depth);
-void *FindBestMove(void *state);
+void FindBestMove(int player);
 void NumberToXY(char num, int *x, int *y);
 int MoveLength(char move[12]);
 int TextToMove(char *mtext, char move[12]);
